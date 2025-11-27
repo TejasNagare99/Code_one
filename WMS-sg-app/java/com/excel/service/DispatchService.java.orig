@@ -1,0 +1,31 @@
+package com.excel.service;
+
+import java.util.Date;
+import java.util.List;
+
+import com.excel.bean.DispatchBean;
+import com.excel.model.AllocationDetailList;
+import com.excel.model.AutoDispatchDropdown;
+import com.excel.model.Dispatch_Header;
+import com.excel.model.GenerateDispatchData;
+import com.excel.model.GenerateDispatchDataCfaStock;
+import com.excel.model.ManualDispatchList;
+import com.excel.model.MonthList;
+
+public interface DispatchService {
+	
+	public AllocationDetailList getAllocationDetailList(String emp_id) throws Exception;
+	public List<MonthList> getMonthList(String tablename, String fieldlist, String search, String orderby) throws Exception;
+	public List<AutoDispatchDropdown> getAutoDispatchDropdown(String alloc_smp_id, String dispatchToLabel, String divId) throws Exception;
+	List<GenerateDispatchData> generateDispatchData(DispatchBean bean) throws Exception;
+	List<GenerateDispatchDataCfaStock> generateDispatchDataCfaStock(DispatchBean bean) throws Exception;
+	 public List<String> getAutoDispatchDetailsUpdated(Long smp_id, Long disp_cycle, Long loc_id, Long div_id,
+			    boolean stock_at_cfa_ind) throws Exception;
+	List<ManualDispatchList> getDispatchListForApproval(String user_id, long sum_dsp_id) throws Exception;
+	List<ManualDispatchList> getManualDispatchListApproval(String user_id, String user_type, Long sum_dsp_id)
+				throws Exception;
+	void finalDispatchApproval(Long tran_id, String user_name, String company_cd, String task_status,
+			String motivation);
+	Dispatch_Header getDispatchHeaderById(Long dsp_id) throws Exception;
+	void updateHeaderForApproval(String status, Long tran_id, String user_name, Date appr_date) throws Exception;
+}

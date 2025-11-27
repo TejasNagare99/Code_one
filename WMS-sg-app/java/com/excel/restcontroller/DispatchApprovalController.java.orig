@@ -1,0 +1,261 @@
+//package com.excel.restcontroller;
+//
+//import java.math.BigDecimal;
+//import java.util.ArrayList;
+//import java.util.Date;
+//import java.util.HashMap;
+//import java.util.List;
+//import java.util.Map;
+//
+//import javax.persistence.EntityManager;
+//import javax.persistence.EntityManagerFactory;
+//import javax.persistence.Query;
+//import javax.persistence.Tuple;
+//import javax.servlet.http.HttpServletRequest;
+//
+//import org.activiti.engine.ProcessEngine;
+//import org.activiti.engine.RuntimeService;
+//import org.springframework.beans.factory.annotation.Autowired;
+//import org.springframework.web.bind.annotation.GetMapping;
+//import org.springframework.web.bind.annotation.RequestMapping;
+//import org.springframework.web.bind.annotation.RequestParam;
+//import org.springframework.web.bind.annotation.RestController;
+//
+//import com.excel.model.Dispatch_Detail;
+//import com.excel.model.Dispatch_Header;
+//import com.excel.model.ManualDispatchList;
+//import com.excel.model.SmpBatch;
+//import com.excel.model.SmpItem;
+//import com.excel.repository.DispatchDetailRepository;
+//import com.excel.repository.DispatchHeaderRepository;
+//import com.excel.repository.DivMasterRepository;
+//import com.excel.repository.ManualDispatchListRepository;
+//import com.excel.repository.V_EMP_DIV_AccessRepository;
+//import com.excel.service.BatchMasterService;
+//import com.excel.service.DispatchService;
+//import com.excel.service.ProductMasterService;
+//import com.excel.service.TaskMasterService;
+//import com.excel.utility.MedicoConstants;
+//
+//@RestController
+//@RequestMapping("/rest")
+//public class DispatchApprovalController implements MedicoConstants {
+//
+//	@Autowired
+//	DispatchService dispatchService;
+//	@Autowired
+//	RuntimeService runtimeService;
+////	@Autowired TaskService taskService;
+//	@Autowired
+//	TaskMasterService taskMasterService;
+//	@Autowired
+//	ProcessEngine processEngine;
+//	@Autowired
+//	ProductMasterService productMasterService;
+//	
+//	@Autowired EntityManagerFactory emf;
+//	@Autowired DivMasterRepository divMasterRepo;
+//	@Autowired V_EMP_DIV_AccessRepository v_EMP_DIV_AccessRepo;
+//	@Autowired ManualDispatchListRepository manualDispatchListRepo;
+//	@Autowired DispatchHeaderRepository dispatchHeaderRepo;
+//	@Autowired DispatchDetailRepository dispatchDetailRepo;
+//	@Autowired BatchMasterService batchMasterService;
+//
+////	@GetMapping("/get-dispatch-data-approval")
+////	public Map<String, Object> getDispatchForApproval(HttpServletRequest request, HttpSession session) {
+////		Map<String, Object> map = null;
+////		try {
+////			map = new HashMap<>();
+////			String emp_id = (String) session.getAttribute("EMP_ID");
+////			List<ManualDispatchList> list = dispatchService.getManualDispatchListApproval(emp_id, null, null);
+////			map.put("dispatchList", list);
+//////		}catch (MedicoException e) {
+//////			System.out.println("Error Occurred :" + new CodifyErrors().getErrorCode(e));// uncomment asneeded --;
+//////			map = new HashMap<>();
+//////			map.put(RESPONSE_MESSAGE, e.getMessage());
+////		} catch (Exception e) {
+////			System.out.println("Error Occurred :" + new CodifyErrors().getErrorCode(e));// uncomment asneeded --;
+////			map.put(RESPONSE_MESSAGE, e.getMessage());
+////		}
+////		return map;
+////	}
+//	
+//	
+//	@GetMapping("/getDivisionForDispatchApproval")
+//	public Object getDivisionForDispatchApproval() {
+//		Map<String,Object> map=new HashMap<>();
+//		
+//		List<Long> divIdList=new ArrayList<>();
+//		List<String> divNameList=new ArrayList<>();
+//		
+//		String q="select * from v_EMP_DIV_Access where DIV_status='A' and EMP_ID='E00040'";
+//		
+//		EntityManager em =  emf.createEntityManager();
+//		Query query = em.createNativeQuery(q, Tuple.class);
+//		List<Tuple> tuples = query.getResultList();
+//		if (tuples != null && !tuples.isEmpty()) {
+//			for(Tuple t : tuples) {
+//				String s=t.get("div_disp_nm", String.class);
+//				divNameList.add(s);
+//			}
+//		}
+//		map.put("divNameList", divNameList);
+//		return map;	
+//	}
+//	@GetMapping("/SummaryChallanNoList")
+//	public Object SummaryChallanNoList(@RequestParam String divisionName) {
+//		EntityManager em=emf.createEntityManager();
+//		String q1="select * from DIV_MASTER where div_disp_nm=:divisionName";
+//		Query query1 = em.createNativeQuery(q1, Tuple.class);
+//		query1.setParameter("divisionName",divisionName.toString());
+//		List<Tuple> tuples1 = query1.getResultList();
+//		Integer divId = null;
+//		if (tuples1 != null && !tuples1.isEmpty()) {
+//			for(Tuple t : tuples1) {
+//				divId=t.get("div_id", Integer.class);
+//				//challanList.add(sdh);
+//			}
+//		}
+//		System.out.println(divId);
+//		
+//		List<String> challanList=new ArrayList<>();
+//		Map<String,Object> map=new HashMap<>();
+//		
+//		String q="select distinct s.sumdsp_id, s.sumdsp_challan_no from SUM_DISP_HEADER s, Dispatch_header d  where s.SUMDSP_DIV_ID=:divId and s.SUMDSP_status = 'A' and d.dsp_appr_status = 'E' and s.SUMDSP_ins_usr_id = 'E00040' and s.SUMDSP_LOC_ID=1 and d.DSP_LOC_ID=1 and d.DSP_SUM_DSP_ID=s.SUMDSP_ID";
+//		
+//		Query query = em.createNativeQuery(q, Tuple.class);
+//		query.setParameter("divId", divId);
+//		List<Tuple> tuples = query.getResultList();
+//		if (tuples != null && !tuples.isEmpty()) {
+//			for(Tuple t : tuples) {
+//				String sdh=t.get("sumdsp_challan_no", String.class);
+//				challanList.add(sdh);
+//			}
+//		}
+//		map.put("ChallanNoList", challanList);
+//		return map;
+//	}
+//	
+//	@GetMapping("/getHeaderForDispatchApproval")
+//	public Object getDetailForDispatchApproval(@RequestParam String ChallanNo) {
+//		System.out.println(ChallanNo);
+//		List<ManualDispatchList> manualDispatchList=new ArrayList<>();
+//		List<ManualDispatchList> challanDetailList=new ArrayList<>();
+//		Map<String,Object> map=new HashMap<>();
+//		String ChallanNumber = null,MSR=null;
+//		long CYCLE = 0;
+//		
+//		manualDispatchList =manualDispatchListRepo.findBydspChallanNo(ChallanNo);
+//		for(int i=0;i<manualDispatchList.size();i++) {
+//			ManualDispatchList mdl=manualDispatchList.get(i);			
+//			//long dspId=mdl.getDsp_id();			
+//			List<Dispatch_Header> list=dispatchHeaderRepo.findBydspSumChallanNo(ChallanNo);
+//			for(int i1=0;i1<list.size();i1++) {
+//				Dispatch_Header manualList= list.get(i1);
+//				ChallanNumber=manualList.getDspChallanNo();
+//				MSR=manualList.getDspfstaff_displayname();
+//				System.out.println("dispatch MR challan"+ChallanNumber);
+//			}
+//			List<ManualDispatchList> cycleList=manualDispatchListRepo.findBydspChallanNo(ChallanNumber);
+//			for(int j=0;j<cycleList.size();j++) {
+//				ManualDispatchList mdl2=cycleList.get(j);
+//				CYCLE=mdl2.getSumdsp_disp_cycle();
+//			}
+//			System.out.println(CYCLE);
+//			challanDetailList.add(mdl);
+//			
+//		}
+//		map.put("challanDetailList", challanDetailList);
+//		map.put("ChallanNumber", ChallanNumber);
+//		map.put("MSR", MSR);
+//		map.put("CYCLE", CYCLE);
+//		return map;
+//	}
+//	
+//	@GetMapping("/getDetailForDispatchApproval")
+//	public Object getHeaderForDispatchApproval(@RequestParam String challanNumber) {
+//		try {			
+//		Map<String,Object> map=new HashMap<>();
+//		
+//		Dispatch_Detail dispatchDetail = null;
+//		List<SmpItem> smpItemList = new ArrayList<>();List<SmpBatch> smpBatchList = new ArrayList<>();
+//		List<String> smpDetail=new ArrayList<>();
+//		List<BigDecimal> quantityList=new ArrayList<>();
+//		BigDecimal quantity=null;
+//		
+//		List<Dispatch_Header> dispatchHeaderList= dispatchHeaderRepo.findBydspChallanNo(challanNumber);
+//		for(int i=0;i<dispatchHeaderList.size();i++) {
+//			Dispatch_Header dh=dispatchHeaderList.get(i);
+//			long dspId=dh.getDsp_id();
+//			System.out.println("*********"+dspId);
+//			List<Dispatch_Detail> detailList=dispatchDetailRepo.findBydspdtlDspId(dspId);
+//			
+//			for(int i1=0;i1<detailList.size();i1++) {
+//				dispatchDetail=detailList.get(i1);
+//				long prodId=dispatchDetail.getDspdtl_prod_id();
+//				long batchId=dispatchDetail.getDspdtl_batch_id();
+//				quantity=dispatchDetail.getDspdtl_disp_qty();
+//				quantityList.add(quantity);
+//				System.out.println(prodId+"..."+batchId);
+//				System.out.println(quantity);
+//				smpItemList.add(productMasterService.getObjectById(prodId));
+//				smpBatchList.add(batchMasterService.getObjectById(batchId));
+//				//map.put("quantity", quantity);
+//			}
+//			//map.put("detailList", detailList);
+//		}
+//		map.put("quantityList", quantityList);
+//		map.put("smpItemList", smpItemList);	
+//		map.put("smpBatchList", smpBatchList);
+//		return map;
+//		} catch (Exception e) {
+//			System.out.println("Error Occurred :" + new CodifyErrors().getErrorCode(e));// uncomment asneeded --;
+//		}
+//		return null;
+//		
+//	}
+//	
+//	@GetMapping("/updateDispatchHeaderForDispatchSelfApproval")
+//	public void updateDispatchHeaderForDispatchSelfApproval(@RequestParam String empId, @RequestParam String challanNumber,HttpServletRequest request) {
+//		System.out.println(challanNumber);
+//		String ip_addr = request.getRemoteAddr();
+//		List<Dispatch_Header> dispatchHeaderList= dispatchHeaderRepo.findBydspChallanNo(challanNumber);
+//		for(int i=0;i<dispatchHeaderList.size();i++) {
+//			Dispatch_Header dh=dispatchHeaderList.get(i);
+//			System.out.println(dh.getDspChallanNo());
+//			String apprStatus=dh.getDsp_appr_status();
+//			
+//			if(apprStatus.equals("E")) {
+//				System.out.println("Old appr status : "+apprStatus);
+//				dh.setDsp_appr_status("F");
+//				dh.setDsp_mod_dt(new Date());
+//				dh.setDsp_mod_ip_add(ip_addr);
+//				dh.setDsp_mod_usr_id(empId);
+//				dispatchHeaderRepo.save(dh);
+//			}
+//			System.out.println("Approve status changed");
+//		}
+//	}
+//
+//}
+//
+//
+//
+//
+//
+//
+////EntityManager em=emf.createEntityManager();
+////String q="select * from v_manual_dispatch_list where dsp_challan_no=:ChallanNo";
+////
+////Query query = em.createNativeQuery(q, Tuple.class);
+////query.setParameter("ChallanNo", ChallanNo);
+////List<ManualDispatchList> tuples = query.getResultList();
+////
+////if (tuples != null && !tuples.isEmpty()) {
+////	for(int i=0;i<tuples.size();i++) {
+////		ManualDispatchList mdl= tuples.get(i);
+////		challanDetailList.add(mdl);
+////	}
+////}
+////map.put("challanDetailList", challanDetailList);
+////System.out.println(map.get("challanDetailList"));

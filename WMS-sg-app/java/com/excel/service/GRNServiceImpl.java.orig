@@ -1,0 +1,888 @@
+package com.excel.service;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.excel.bean.GRNBean;
+import com.excel.bean.TaxCalculationBean;
+import com.excel.bean.TaxParamBean;
+import com.excel.exception.MedicoException;
+import com.excel.model.Am_m_System_Parameter;
+import com.excel.model.BatchStockLog;
+import com.excel.model.BatchStockLogNS;
+import com.excel.model.GrnDetails;
+import com.excel.model.GrnHeader;
+import com.excel.model.SG_d_parameters_details;
+import com.excel.model.Location;
+import com.excel.model.SmpBatch;
+import com.excel.model.SmpBatchNS;
+import com.excel.model.Supplier;
+import com.excel.model.V_Grn_Details;
+import com.excel.repository.BatchMasterRepository;
+import com.excel.repository.BatchStockLogRepository;
+import com.excel.repository.CalculateGstRepository;
+import com.excel.repository.GrnRepository;
+import com.excel.repository.ParameterRepository;
+import com.excel.repository.GrnRepositoryImpl;
+import com.excel.repository.LocationRepository;
+import com.excel.repository.ProductMasterRepository;
+import com.excel.repository.SupplierRepository;
+import com.excel.repository.SystemParameterRepository;
+import com.excel.repository.TransactionalRepository;
+import com.excel.utility.MedicoConstants;
+import com.excel.utility.MedicoResources;
+
+@Service
+public class GRNServiceImpl implements GRNService, MedicoConstants {
+	
+	@Autowired GrnRepository grnRepository;
+	@Autowired SystemParameterRepository systemParameterRepository;
+	@Autowired TransactionalRepository transactionalRepository;
+	@Autowired ProductMasterRepository productMasterRepository;
+	@Autowired BatchMasterRepository batchMasterRepository;
+	@Autowired BatchStockLogRepository batchStockLogRepository;
+	@Autowired ParameterRepository parameterRepository;
+		@Autowired CalculateGstService calculateGstService;
+	@Autowired LocationRepository locationRepository;
+	@Autowired SupplierRepository supplierRepository;
+	@Autowired CalculateGstRepository calculateGstRepository;
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public Map<String, Object> saveGRN(GRNBean bean) throws Exception {
+		System.out.println("stockTypeId"+bean.getStockTypeId()+"getStockType"+bean.getStockType()+"getStockTypeForNS"+bean.getStockTypeForNS());
+		Map<String, Object> map = new HashMap<>();
+		System.out.println("bean.getGrnId()"+bean.getGrnId());
+		System.out.println("bean.getGrnDetailId()"+bean.getGrnDetailId());
+		System.out.println("bean.getQuantity()"+bean.getQuantity());
+		System.out.println("bean.getRate()"+bean.getRate());
+		BigDecimal grnTotalValue = BigDecimal.ZERO;
+		if(!bean.isModifyHeader()) {
+			if(bean.getGrnId().compareTo(0L) == 0) {
+				grnTotalValue = bean.getQuantity().multiply(bean.getRate());
+			} else if(bean.getGrnId().compareTo(0L) != 0 && bean.getGrnDetailId().compareTo(0L) == 0) {
+				grnTotalValue = bean.getQuantity().multiply(bean.getRate()).add((this.grnRepository.getTotalGrnValueByGrnId(bean.getGrnId(), null)));
+			} else if(bean.getGrnId().compareTo(0L) != 0 && bean.getGrnDetailId().compareTo(0L) != 0) {
+				grnTotalValue = bean.getQuantity().multiply(bean.getRate()).add((this.grnRepository.getTotalGrnValueByGrnId(bean.getGrnId(), null)));
+			}
+		}
+		GrnHeader header = this.saveGrnHeader(bean);
+		if(!bean.isModifyHeader()) {
+			GrnDetails detail = this.saveGrnDetail(bean, header);
+			if(detail != null) {
+				if(bean.getStockType().equals(SA)) {
+					SmpBatch batch = this.saveSmpBatch(detail, bean);
+					if(bean.getBatch_id().compareTo(0L) == 0) {
+						detail.setGrnd_batch_id(batch.getBatch_id());
+						this.transactionalRepository.update(detail);
+					}
+					this.saveBatchStockLog(bean, detail);
+				} else if(bean.getStockType().equals(NS)) {
+					SmpBatchNS batch = this.saveSmpBatchNonSalable(detail, bean);
+					if(bean.getBatch_id().compareTo(0L) == 0) {
+						detail.setGrnd_batch_id(batch.getBatch_id());
+						this.transactionalRepository.update(detail);
+					}
+					this.saveBatchStockLogNonSalable(bean, detail);
+				}
+			} else {
+				throw new MedicoException("GRN Details not found");
+			}
+		}		
+		header.setGrn_total_value(grnTotalValue);
+		header.setGrn_mod_usr_id(bean.getEmpId());
+		header.setGrn_mod_dt(new Date());
+		header.setGrn_mod_ip_add(bean.getIpAddress());
+		this.transactionalRepository.update(header);
+		map.put("headerId", header.getGrnId());
+		map.put("grnNumber", header.getGrn_no());
+		map.put("grnValue", header.getGrn_total_value());
+		//map.put("grnDetailId", detail.getGrndId());
+		return map;
+	}
+	
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public GrnHeader saveGrnHeader(GRNBean bean) throws Exception{
+		GrnHeader header = null;
+		if(bean.getGrnId().compareTo(0L) == 0) {
+			header = new GrnHeader();
+			Long maxGrnId = this.grnRepository.getMaxGrnId();
+			//header.setGrn_id(0L);
+			header.setGrn_no(this.grnRepository.getGrnNumber("GRN_NO", "GRN_HEADER", "G", "GRN_FIN_YEAR= '" + bean.getFinYear() + "' and GRN_LOC_ID= " + bean.getLoc_id()  + " and GRN_COMPANY= '" + bean.getCompanyCode() +"'"));
+			System.out.println("grn_no" + header.getGrn_no());
+			header.setGrnd_sl_no((maxGrnId == null ? 0 : maxGrnId) + 1L);
+			header.setGrn_company(bean.getCompanyCode());
+			header.setGrn_fin_year(bean.getFinYear());
+			header.setGrn_period_code(bean.getPeriodCd());
+			header.setGrn_loc_id(bean.getLoc_id());
+			header.setGrn_dt(bean.getGrnDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getGrnDate()));
+			header.setGrn_supplier_id(bean.getSendingLocId());
+			header.setGrn_transfer_no(bean.getChallanNo());
+			header.setGrn_transfer_dt(bean.getChallanDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getChallanDate()));
+			header.setGrn_lr_no(bean.getLrNumber());
+			header.setGrn_lr_dt(bean.getLrDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getLrDate()));
+			header.setGrn_lorry_no(bean.getLorryRegNumber());
+			header.setGrn_purchase_id(0L);
+			header.setGrn_sending_loc_id(8L);
+			header.setGrn_trf_type("0");
+			header.setGrn_trf_dt(bean.getLrDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getLrDate()));
+			header.setGrn_in_transit("N");
+			//header.setGrn_auto_grn_dt();
+			header.setGrn_auto_grn_auth("");
+			header.setGrn_locked_yn("");
+			header.setGrn_erp_grn_cd("");
+			header.setGrn_erp_stktfr_cd("");
+			header.setGrn_delivery_no("");
+			header.setGrn_f_form_no("");
+			header.setGrn_consignment_type("");
+			header.setGrn_full_shippers(BigDecimal.ZERO);
+			header.setGrn_loose_shippers(BigDecimal.ZERO);
+			header.setGrn_weight(BigDecimal.ZERO);
+			header.setGrn_volume(BigDecimal.ZERO);
+			header.setGrn_transport_mode("");
+			header.setGrn_octroi(bean.getGrnOctroi());
+			header.setGrn_ins_usr_id(bean.getEmpId());
+			header.setGrn_mod_usr_id("");
+			header.setGrn_mod_ip_add("");
+			header.setGrn_ins_dt(new Date());
+			header.setGrn_mod_dt(null);
+			header.setGrn_ins_ip_add(bean.getIpAddress());  // ??
+			header.setGrn_mod_ip_add(null);
+			header.setGrn_status(A);
+			Am_m_System_Parameter param = this.systemParameterRepository.getSpValueBySpName("Grn_APPR_REQ").get(0);
+			header.setGrn_appr_req(Long.parseLong(param.getSp_value()));
+			header.setGrn_appr_acq(0L);
+			header.setGrn_appr_status(E);
+			header.setGrn_po_no(bean.getPoNumber());
+			header.setGrn_po_date(bean.getPoDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getPoDate()));
+			header.setGcma_code(bean.getGcmaCode());
+			header.setGcma_appr_date(bean.getGcmaAppDate() == null ? null : bean.getGcmaAppDate() == "" ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getGcmaAppDate()));
+			header.setGcma_expiry_date(bean.getGcmaExpDate() == null ? null : bean.getGcmaExpDate() == "" ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getGcmaExpDate()));
+			header.setGrn_fin_year(bean.getFinYear());
+			header.setGrn_type_id(bean.getGrnType()); // ??
+			header.setGrn_doctype_id(bean.getSupplierType());
+			header.setReturn_from_fs_id(bean.getFs_id() == null ? 0L : bean.getFs_id().compareTo(0L) == 0 ? 0L : bean.getFs_id());
+			header.setGrn_stock_sa_or_ns(bean.getStockType());
+			header.setGrn_appr_cycle("");
+			header.setRemarks("");
+			header.setGrn_lbl_print("");
+			header.setSgst_bill_amt(BigDecimal.ZERO);
+			header.setCgst_bill_amt(BigDecimal.ZERO);
+			header.setIgst_bill_amt(BigDecimal.ZERO);
+			header.setGst_reverse_chg("");
+			header.setGst_doc_type("");
+			header.setText1("");
+			header.setText2("");
+			header.setValue1(BigDecimal.ZERO);
+			header.setValue2(BigDecimal.ZERO);
+			header.setGrn_stock_type_id(0L);
+			header.setGrn_total_value(BigDecimal.ZERO);
+			header.setGrn_stock_type_id(bean.getGrnStockTypeId());
+			
+			this.transactionalRepository.persist(header);
+		} else if(!bean.getSaveMode().equals(ENTRY_MODE) && bean.isModifyHeader()){
+			header = this.grnRepository.getObjectById(bean.getGrnId());
+			header.setGrn_company(bean.getCompanyCode());
+			header.setGrn_supplier_id(bean.getSendingLocId());
+			header.setGrn_transfer_no(bean.getChallanNo());
+			header.setGrn_transfer_dt(bean.getChallanDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getChallanDate()));
+			header.setGrn_lr_no(bean.getLrNumber());
+			header.setGrn_lr_dt(bean.getLrDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getLrDate()));
+			header.setGrn_lorry_no(bean.getLorryRegNumber());
+			header.setGrn_sending_loc_id(8L);
+			header.setGrn_trf_type("0");
+			header.setGrn_trf_dt(bean.getLrDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getLrDate()));
+			header.setGrn_erp_grn_cd("");
+			header.setGrn_erp_stktfr_cd("");
+			header.setGrn_delivery_no("");
+			header.setGrn_f_form_no("");
+			header.setGrn_consignment_type("");
+			header.setGrn_full_shippers(BigDecimal.ZERO);
+			header.setGrn_loose_shippers(BigDecimal.ZERO);
+			header.setGrn_weight(BigDecimal.ZERO);
+			header.setGrn_volume(BigDecimal.ZERO);
+			header.setGrn_transport_mode("");
+			header.setGrn_octroi(bean.getGrnOctroi());
+			header.setGrn_mod_usr_id(bean.getEmpId());
+			header.setGrn_mod_dt(new Date());
+			header.setGrn_mod_ip_add(bean.getIpAddress());
+			header.setGrn_po_no(bean.getPoNumber());
+			header.setGrn_po_date(bean.getPoDate() == null ? null : MedicoResources.convert_DD_MM_YYYY_toDate(bean.getPoDate()));
+			this.transactionalRepository.update(header);
+		} else if(bean.getGrnId().compareTo(0L) != 0) {
+			header = this.grnRepository.getObjectById(bean.getGrnId());
+		}
+		return header;
+	}
+	
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public GrnDetails saveGrnDetail(GRNBean bean, GrnHeader header) throws Exception{
+		GrnDetails details = null;
+		if(bean.getGrnDetailId().compareTo(0L) == 0 && !bean.isModifyDetails()) {
+			details = new GrnDetails();
+			details.setGrndGrnId(header.getGrnId());
+			//details.setGrnd_grn_id(null);
+			details.setGrnd_sl_no(0L);
+			details.setGrnd_company(header.getGrn_company());
+			details.setGrnd_loc_id(header.getGrn_loc_id());
+			details.setGrnd_fin_year(header.getGrn_fin_year());
+			details.setGrnd_period_code(header.getGrn_period_code());
+			details.setGrnd_div_id(this.productMasterRepository.getDivIdByProdId(bean.getItemId()).getSmp_std_div_id());
+			details.setGrnd_prod_id(bean.getItemId());
+			details.setGrnd_batch_id(bean.getBatch_id().compareTo(0L) == 0 ? 0L : bean.getBatch_id());
+			details.setGrnd_qty(bean.getQuantity());
+			details.setGrnd_rate(bean.getRate());
+			details.setGrnd_ins_usr_id(bean.getEmpId());
+			details.setGrnd_mod_usr_id("");
+			details.setGrnd_ins_dt(new Date());
+			//details.setGrnd_mod_dt(null);
+			details.setGrnd_ins_ip_add(bean.getIpAddress());  // ??
+			details.setGrnd_mod_ip_add("");
+			details.setGrnd_status(A);
+			details.setGrnd_returnfrom("");  // ??
+			details.setGrnd_challanno(""); // ??
+			details.setGrnd_noofboxes(bean.getNumberOfBoxes() == null ? 0L : bean.getNumberOfBoxes());
+			details.setGrnd_value(bean.getQuantity().multiply(bean.getRate()));
+			details.setGrnd_image_path("");
+			details.setGrnd_bin_id(bean.getBinNumber() == null ? 0L : bean.getBinNumber());
+			details.setGrnd_appr_status(E);
+			details.setGrnd_image_moved("");
+			details.setSgst_rate(BigDecimal.ZERO);
+			details.setSgst_bill_amt(BigDecimal.ZERO);
+			details.setCgst_rate(BigDecimal.ZERO);
+			details.setCGST_BILL_AMT(BigDecimal.ZERO);
+			details.setIgst_rate(BigDecimal.ZERO);
+			details.setIgst_bill_amt(BigDecimal.ZERO);
+			details.setGst_reverse_chg("");
+			details.setGst_doc_type("");
+			details.setText1("Customs Duty");
+			details.setText2("Discount");
+			details.setValue1(bean.getCustomDuty() == null ? BigDecimal.ZERO : bean.getCustomDuty());
+			details.setValue2(bean.getDiscount() == null ? BigDecimal.ZERO : bean.getDiscount());
+			this.transactionalRepository.persist(details);
+			this.updateForGST(details, header,"PFZ");
+		} else if(bean.getGrnDetailId().compareTo(0L) > 0 && bean.isModifyDetails()){
+			details = this.grnRepository.getObjectByDetailId(bean.getGrnDetailId());
+			details.setGrnd_prod_id(bean.getItemId());
+			details.setGrnd_batch_id(bean.getBatch_id().compareTo(0L) == 0 ? 0L : bean.getBatch_id());
+			details.setGrnd_qty(details.getGrnd_qty().add(bean.getQuantity()));
+			details.setGrnd_rate(bean.getRate());
+			//details.setGrnd_ins_usr_id(bean.getEmpId());
+			details.setGrnd_mod_usr_id(bean.getEmpId());
+			//details.setGrnd_ins_dt(new Date());
+			details.setGrnd_mod_dt(new Date());
+			//details.setGrnd_ins_ip_add(bean.getIpAddress());  // ??
+			details.setGrnd_mod_ip_add(bean.getIpAddress());
+			details.setGrnd_returnfrom(null);  // ??
+			details.setGrnd_challanno(null); // ??
+			details.setGrnd_noofboxes(bean.getNumberOfBoxes() == null ? 0L : bean.getNumberOfBoxes());
+			details.setGrnd_value(details.getGrnd_qty().multiply(details.getGrnd_rate()));
+			details.setGrnd_bin_id(bean.getBinNumber() == null ? 0L : bean.getBinNumber());
+			details.setText1("Customs Duty");
+			details.setText2("Discount");
+			details.setValue1(bean.getCustomDuty() == null ? BigDecimal.ZERO : bean.getCustomDuty());
+			details.setValue2(bean.getDiscount() == null ? BigDecimal.ZERO : bean.getDiscount());
+			this.transactionalRepository.update(details);
+			this.updateForGST(details, header,"PFZ");
+		}		
+		return details;
+	}
+	
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public SmpBatch saveSmpBatch(GrnDetails detail, GRNBean bean) throws Exception{
+		SmpBatch batch = null;		
+		if(bean.getBatch_id().compareTo(0L) == 0) {
+			batch = new SmpBatch();
+			batch.setBatch_prod_id(detail.getGrnd_prod_id());
+			batch.setBatch_loc_id(detail.getGrnd_loc_id());
+			batch.setBatch_no(((bean.getAllowBatchCreateInd() == N && detail.getGrnd_company() == PFZ) ? 
+					bean.getBatchNumber() : (bean.getAllowBatchCreateInd() == N && detail.getGrnd_company() != PFZ) ?
+							"No Batch" : bean.getBatchNumber()));
+			batch.setBatch_mfg_dt((bean.getAllowBatchCreateInd() == N) ? null : 
+				MedicoResources.convert_DD_MM_YYYY_toDate(bean.getMfgDate()));
+			batch.setBatch_expiry_dt((bean.getAllowBatchCreateInd() == N) ? null : 
+				MedicoResources.convert_DD_MM_YYYY_toDate(bean.getExpDate()));
+			batch.setBatch_narration(bean.getRemark());
+			batch.setBatch_rate(bean.getRate());
+			batch.setBatch_display_rate(this.productMasterRepository.getRateByProdId(bean.getItemId()));
+			batch.setBatch_open_stock(0L);
+			batch.setBatch_in_stock(detail.getGrnd_qty());
+			batch.setBatch_with_held_qty(detail.getGrnd_qty());
+			batch.setBatch_ins_usr_id(bean.getEmpId());
+			batch.setBatch_ins_dt(new Date());
+			batch.setBatch_ins_ip_add(bean.getIpAddress()); // ??
+			batch.setBatch_status(A);
+			batch.setBatch_physical_stock(0L);
+			batch.setBatch_mfg_loc_id(0L);
+			batch.setBatch_costing_rate(BigDecimal.ZERO);
+			batch.setBatch_mktg_rate(BigDecimal.ZERO);
+			batch.setBatch_nrv(BigDecimal.ZERO);
+			batch.setBatch_out_stock(BigDecimal.ZERO);
+			batch.setBatch_exclude_loc("");
+			batch.setBatch_exclude_PARTY("");
+			batch.setBatch_exclude_PARTY("");
+			this.transactionalRepository.persist(batch);
+		} else {
+			batch = this.batchMasterRepository.getObjectById(bean.getBatch_id());
+			if(this.batchMasterRepository.checkIfBatchStockIsNegative(batch.getBatch_id(), batch.getBatch_prod_id(), batch.getBatch_loc_id()))
+				throw new MedicoException("Stock negative, cannot update");
+			if(this.batchMasterRepository.checkIfBatchStockIsNegativeByBatchIdProdIdLocId(batch.getBatch_id(), batch.getBatch_prod_id(), batch.getBatch_loc_id()))
+				throw new MedicoException("Stock negative, cannot update");
+			batch.setBatch_rate(bean.getRate());
+			batch.setBatch_display_rate(this.productMasterRepository.getRateByProdId(bean.getItemId()));
+			batch.setBatch_narration(bean.getRemark());
+			batch.setBatch_mod_usr_id(bean.getEmpId());
+			batch.setBatch_mod_dt(new Date());
+			batch.setBatch_mod_ip_add(bean.getIpAddress()); // ??
+			batch.setBatch_status(A);
+			if(bean.getGrnDetailId().compareTo(0L) == 0) {
+				batch.setBatch_in_stock(batch.getBatch_in_stock().add(bean.getQuantity()));
+				batch.setBatch_with_held_qty(batch.getBatch_with_held_qty().add(bean.getQuantity()));
+			} else {
+				batch.setBatch_in_stock(batch.getBatch_in_stock().add(bean.getQuantity()));
+				batch.setBatch_with_held_qty(batch.getBatch_with_held_qty().add(bean.getQuantity()));
+			}
+			this.transactionalRepository.update(batch);
+		}
+		return batch;
+	}
+	
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public void saveBatchStockLog(GRNBean bean, GrnDetails detail) throws Exception{
+		BatchStockLog batchStockLog = this.batchStockLogRepository.getRecordByProdIdNew(detail.getGrnd_prod_id(), detail.getGrnd_batch_id(), detail.getGrnd_loc_id(), detail.getGrnd_ins_dt());
+		if(batchStockLog != null) {
+			batchStockLog.setBtchstklg_mod_dt(MedicoResources.convert_DD_MM_YYYY_toDate(MedicoResources.convertUtilDateToString_DD_MM_YYYY(new Date()))); //??
+			batchStockLog.setBtchstklg_mod_usr_id(bean.getEmpId());
+			batchStockLog.setBtchstklg_mod_ip_add(bean.getIpAddress()); // ??
+			batchStockLog.setBtchstklg_status(A);
+			if(bean.getGrnDetailId().compareTo(0L) == 0){
+				batchStockLog.setBtchstklg_qty(batchStockLog.getBtchstklg_qty().add(bean.getQuantity()));
+				batchStockLog.setBtchstklg_value(detail.getGrnd_rate().multiply((batchStockLog.getBtchstklg_qty())));
+			} else {
+				batchStockLog.setBtchstklg_qty(batchStockLog.getBtchstklg_qty().add(bean.getQuantity()));
+				batchStockLog.setBtchstklg_value(detail.getGrnd_rate().multiply((batchStockLog.getBtchstklg_qty())));
+			}
+			this.transactionalRepository.update(batchStockLog);
+		} else {
+			batchStockLog = new BatchStockLog();
+			batchStockLog.setBtchstklg_fin_year(detail.getGrnd_fin_year());
+			batchStockLog.setBtchstklg_date(MedicoResources.convert_DD_MM_YYYY_toDate(MedicoResources.convertUtilDateToString_DD_MM_YYYY(new Date())));
+			batchStockLog.setBtchstklg_loc_id(detail.getGrnd_loc_id());
+			batchStockLog.setBtchstklg_prod_id(detail.getGrnd_prod_id());
+			batchStockLog.setBtchstklg_batch_id(detail.getGrnd_batch_id());
+			batchStockLog.setBtchstklg_div_id(detail.getGrnd_div_id());
+			batchStockLog.setBtchstklg_tran_type(GRN);
+			batchStockLog.setBtchstklg_qty(detail.getGrnd_qty());
+			batchStockLog.setBtchstklg_value(detail.getGrnd_rate().multiply((batchStockLog.getBtchstklg_qty())));
+			batchStockLog.setBtchstklg_ins_usr_id(detail.getGrnd_ins_usr_id());
+			batchStockLog.setBtchstklg_mod_usr_id("");
+			batchStockLog.setBtchstklg_ins_dt(MedicoResources.convert_DD_MM_YYYY_toDate(MedicoResources.convertUtilDateToString_DD_MM_YYYY(new Date())));
+			//batchStockLog.setBtchstklg_mod_dt(null);
+			batchStockLog.setBtchstklg_ins_ip_add(bean.getIpAddress());  //??
+			batchStockLog.setBtchstklg_mod_ip_add("");
+			batchStockLog.setBtchstklg_status(A);
+			this.transactionalRepository.persist(batchStockLog);
+		}		
+	}
+	
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public SmpBatchNS saveSmpBatchNonSalable(GrnDetails detail, GRNBean bean) throws Exception{
+		SmpBatchNS batch = null;
+		batch = this.batchMasterRepository.getNSObjectByIdAndStocktype(detail.getGrnd_batch_id(), detail.getGrnd_prod_id(), detail.getGrnd_loc_id(), bean.getStockTypeForNS() != null && bean.getStockTypeForNS() != "" ? bean.getStockTypeForNS() : STOCK_TYPE_07);
+		//System.out.println("stockType::::28 "+batch.getStock_type());
+		//System.out.println("batch:::"+batch.getBatch_id());
+		if(bean.getBatch_id().compareTo(0L) == 0 || batch == null) {
+			SmpBatchNS newbatch = new SmpBatchNS();
+			newbatch.setBatch_id(bean.getBatch_id());
+			newbatch.setBatch_rate(bean.getRate());
+			newbatch.setBatch_prod_id(detail.getGrnd_prod_id());
+			newbatch.setBatch_loc_id(detail.getGrnd_loc_id());
+			newbatch.setBatch_no(((bean.getAllowBatchCreateInd() == N && detail.getGrnd_company() == PFZ) ? 
+					bean.getBatchNumber() : (bean.getAllowBatchCreateInd() == N && detail.getGrnd_company() != PFZ) ?
+							"No Batch" : bean.getBatchNumber()));
+			newbatch.setBatch_mfg_dt((bean.getAllowBatchCreateInd() == N) ? null : 
+				MedicoResources.convert_DD_MM_YYYY_toDate(bean.getMfgDate()));
+			newbatch.setBatch_expiry_dt((bean.getAllowBatchCreateInd() == N) ? null : 
+				MedicoResources.convert_DD_MM_YYYY_toDate(bean.getExpDate()));
+			newbatch.setBatch_narration("");
+			newbatch.setBatch_rate(bean.getRate());
+			newbatch.setBatch_display_rate(this.productMasterRepository.getRateByProdId(bean.getItemId()));
+			newbatch.setBatch_open_stock(0L);
+			newbatch.setBatch_in_stock(detail.getGrnd_qty());
+			newbatch.setBatch_with_held_qty(detail.getGrnd_qty());
+			newbatch.setBatch_ins_usr_id(bean.getEmpId());
+			newbatch.setBatch_ins_dt(new Date());
+			newbatch.setBatch_ins_ip_add(bean.getIpAddress()); // ??
+			newbatch.setBatch_status(A);
+			newbatch.setStock_type(bean.getStockTypeForNS() != null && bean.getStockTypeForNS() != "" ? bean.getStockTypeForNS() : STOCK_TYPE_07);
+			//System.out.println("bean.getStockTypeForNS()::"+bean.getStockTypeForNS()+"::"+"setStock_type");
+			newbatch.setBatch_physical_stock(0L);
+			newbatch.setBatch_mfg_loc_id(0L);
+			newbatch.setBatch_costing_rate(BigDecimal.ZERO);
+			newbatch.setBatch_mktg_rate(BigDecimal.ZERO);
+			newbatch.setBatch_nrv(BigDecimal.ZERO);
+			newbatch.setBatch_out_stock(BigDecimal.ZERO);
+			newbatch.setBatch_exclude_loc("");
+			newbatch.setBatch_exclude_PARTY("");
+			newbatch.setBatch_exclude_PARTY("");
+			this.transactionalRepository.persist(newbatch);
+		} else {
+			if(this.batchMasterRepository.checkIfNSBatchStockIsNegative(batch.getBatch_id(), batch.getBatch_prod_id(), batch.getBatch_loc_id(), batch.getStock_type()))
+				throw new MedicoException("Stock negative, cannot update");
+			if(this.batchMasterRepository.checkIfNSBatchStockIsNegativeByBatchIdProdIdLocId(batch.getBatch_id(), batch.getBatch_prod_id(), batch.getBatch_loc_id(), batch.getStock_type()))
+				throw new MedicoException("Stock negative, cannot update");
+			batch.setBatch_rate(bean.getRate());
+			batch.setBatch_display_rate(this.productMasterRepository.getRateByProdId(bean.getItemId()));
+			batch.setBatch_narration(bean.getRemark());
+			batch.setBatch_mod_usr_id(bean.getEmpId());
+			batch.setBatch_mod_dt(new Date());
+			batch.setBatch_mod_ip_add(bean.getIpAddress()); // ??
+			batch.setBatch_status(A);
+			batch.setStock_type(bean.getStockTypeForNS() != null && bean.getStockTypeForNS() != "" ? bean.getStockTypeForNS() : STOCK_TYPE_07);
+			//System.out.println("bean.getStockTypeForNS()"+bean.getStockTypeForNS()+"::"+"Stock_type"+batch.getStock_type());
+			if(bean.getGrnDetailId().compareTo(0L) == 0) {
+				batch.setBatch_in_stock(batch.getBatch_in_stock().add(bean.getQuantity()));
+				batch.setBatch_with_held_qty(batch.getBatch_with_held_qty().add(bean.getQuantity()));
+			} else {
+				batch.setBatch_in_stock(batch.getBatch_in_stock().add(bean.getQuantity()));
+				batch.setBatch_with_held_qty(batch.getBatch_with_held_qty().add(bean.getQuantity()));
+			}
+			this.transactionalRepository.update(batch);
+		}
+		return batch;
+	}
+	
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public void saveBatchStockLogNonSalable(GRNBean bean, GrnDetails detail) throws Exception{
+		BatchStockLogNS batchStockLog = this.batchStockLogRepository.getNSRecordByProdIdNew(detail.getGrnd_prod_id(), detail.getGrnd_batch_id(), detail.getGrnd_loc_id(), detail.getGrnd_ins_dt(), bean.getStockTypeForNS() != null && bean.getStockTypeForNS() != "" ? bean.getStockTypeForNS() : STOCK_TYPE_07);
+		if(batchStockLog != null) {
+			batchStockLog.setBtchstklg_mod_dt(MedicoResources.convert_DD_MM_YYYY_toDate(MedicoResources.convertUtilDateToString_DD_MM_YYYY(new Date()))); //??
+			batchStockLog.setBtchstklg_mod_usr_id(bean.getEmpId());
+			batchStockLog.setBtchstklg_mod_ip_add(bean.getIpAddress()); // ??
+			batchStockLog.setBtchstklg_status(A);
+			batchStockLog.setBtchstklg_stock_type(bean.getStockTypeForNS() != null && bean.getStockTypeForNS() != "" ? bean.getStockTypeForNS() : STOCK_TYPE_07);
+			//System.out.println("bean.getStockTypeForNS()::"+bean.getStockTypeForNS()+"::"+"Btchstklg_stock_type"+batchStockLog.getBtchstklg_stock_type());
+			if(bean.getGrnDetailId().compareTo(0L) == 0) {
+				batchStockLog.setBtchstklg_qty(batchStockLog.getBtchstklg_qty().add(bean.getQuantity()));
+				batchStockLog.setBtchstklg_value(detail.getGrnd_rate().multiply((batchStockLog.getBtchstklg_qty())));
+			} else {
+				batchStockLog.setBtchstklg_qty(batchStockLog.getBtchstklg_qty().add(bean.getQuantity()));
+				batchStockLog.setBtchstklg_value(detail.getGrnd_rate().multiply((batchStockLog.getBtchstklg_qty())));
+			}
+			this.transactionalRepository.update(batchStockLog);
+		} else {
+			batchStockLog = new BatchStockLogNS();
+			batchStockLog.setBtchstklg_fin_year(detail.getGrnd_fin_year());
+			batchStockLog.setBtchstklg_date(MedicoResources.convert_DD_MM_YYYY_toDate(MedicoResources.convertUtilDateToString_DD_MM_YYYY(new Date())));
+			batchStockLog.setBtchstklg_loc_id(detail.getGrnd_loc_id());
+			batchStockLog.setBtchstklg_prod_id(detail.getGrnd_prod_id());
+			batchStockLog.setBtchstklg_batch_id(detail.getGrnd_batch_id());
+			batchStockLog.setBtchstklg_tran_type(GRN);
+			batchStockLog.setBtchstklg_qty(detail.getGrnd_qty());
+			batchStockLog.setBtchstklg_value(detail.getGrnd_qty().multiply(detail.getGrnd_rate()));
+			batchStockLog.setBtchstklg_ins_usr_id(detail.getGrnd_ins_usr_id());
+			batchStockLog.setBtchstklg_mod_usr_id("");
+			batchStockLog.setBtchstklg_ins_dt(MedicoResources.convert_DD_MM_YYYY_toDate(MedicoResources.convertUtilDateToString_DD_MM_YYYY(new Date())));
+			//batchStockLog.setBtchstklg_mod_dt(null);
+			batchStockLog.setBtchstklg_ins_ip_add(bean.getIpAddress());  //??
+			batchStockLog.setBtchstklg_mod_ip_add("");
+			batchStockLog.setBtchstklg_status(A);
+			batchStockLog.setBtchstklg_stock_type(bean.getStockTypeForNS() != null && bean.getStockTypeForNS() != "" ? bean.getStockTypeForNS() : STOCK_TYPE_07);
+			batchStockLog.setBtchstklg_div_id(detail.getGrnd_div_id()); // ??
+			this.transactionalRepository.persist(batchStockLog);
+		}
+	}
+	
+	@Override
+	public List<V_Grn_Details> getGrnDetailViewByGrnId(Long grnId) throws Exception {
+		return this.grnRepository.getGrnDetailViewByGrnId(grnId);
+	}
+
+	@Override
+	public boolean checkIfBatchExistsInGrnDetail(Long grnId,Long prodId, Long batchId) throws Exception {
+		return this.grnRepository.checkIfBatchExistsInGrnDetail(grnId, prodId, batchId);
+	}
+
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public BigDecimal deleteGrnDetailById(Long grnDetailId, String empId) {
+		try {
+			GrnDetails detail = this.grnRepository.getObjectByDetailId(grnDetailId);
+			if(detail != null) {
+				BigDecimal grnvalue = this.grnRepository.getTotalGrnValueByGrnId(detail.getGrndGrnId(), null);
+				grnvalue = grnvalue.subtract(detail.getGrnd_value());
+				//System.out.println("grnvalue"+grnvalue);
+				GrnHeader header = this.grnRepository.getObjectById(detail.getGrndGrnId());
+				SG_d_parameters_details parameter = this.parameterRepository.getObjectById(header.getGrn_stock_type_id());
+				if(header.getGrn_stock_sa_or_ns().equals(SA)) {
+					SmpBatch batch = this.batchMasterRepository.getObjectById(detail.getGrnd_batch_id());
+					if(batch != null) {
+						if(this.batchMasterRepository.checkIfBatchStockIsNegative(batch.getBatch_id(), batch.getBatch_prod_id(), batch.getBatch_loc_id()))
+							throw new MedicoException("Stock negative, cannot update");
+						if(this.batchMasterRepository.checkIfBatchStockIsNegativeByBatchIdProdIdLocId(batch.getBatch_id(), batch.getBatch_prod_id(), batch.getBatch_loc_id()))
+							throw new MedicoException("Stock negative, cannot update");
+						batch.setBatch_with_held_qty(batch.getBatch_with_held_qty().subtract(detail.getGrnd_qty()));
+						batch.setBatch_in_stock(batch.getBatch_in_stock().subtract(detail.getGrnd_qty()));
+						batch.setBatch_mod_dt(new Date());
+						batch.setBatch_mod_ip_add(null);
+						batch.setBatch_mod_usr_id(empId);
+						this.transactionalRepository.update(batch);
+					} else {
+						throw new MedicoException("Batch Details not found.");
+					}
+					BatchStockLog batchLog = this.batchStockLogRepository.getRecordByProdId(detail.getGrnd_prod_id(), detail.getGrnd_batch_id(), detail.getGrnd_loc_id());
+					if(batchLog != null) {
+						batchLog.setBtchstklg_qty(batchLog.getBtchstklg_qty().subtract(detail.getGrnd_qty()));
+						batchLog.setBtchstklg_value(batchLog.getBtchstklg_value().subtract((detail.getGrnd_qty().multiply(detail.getGrnd_rate()))));
+						batchLog.setBtchstklg_mod_ip_add(null);
+						batchLog.setBtchstklg_mod_dt(new Date());
+						batchLog.setBtchstklg_mod_usr_id(empId);
+						transactionalRepository.update(batchLog);
+					} else {
+						throw new MedicoException("Batch Stock Log not Found.");
+					}
+				} else {
+					SmpBatchNS batchNS = this.batchMasterRepository.getNSObjectByIdAndStocktype(detail.getGrnd_batch_id(), detail.getGrnd_prod_id(), detail.getGrnd_loc_id(), parameter.getSgprmdet_nm());
+					if(batchNS != null) {
+						if(this.batchMasterRepository.checkIfNSBatchStockIsNegative(batchNS.getBatch_id(), batchNS.getBatch_prod_id(), batchNS.getBatch_loc_id(), batchNS.getStock_type()))
+							throw new MedicoException("Stock negative, cannot update");
+						if(this.batchMasterRepository.checkIfNSBatchStockIsNegativeByBatchIdProdIdLocId(batchNS.getBatch_id(), batchNS.getBatch_prod_id(), batchNS.getBatch_loc_id(), batchNS.getStock_type()))
+							throw new MedicoException("Stock negative, cannot update");
+						batchNS.setBatch_with_held_qty(batchNS.getBatch_with_held_qty().subtract(detail.getGrnd_qty()));
+						batchNS.setBatch_in_stock(batchNS.getBatch_in_stock().subtract(detail.getGrnd_qty()));
+						batchNS.setBatch_mod_dt(new Date());
+						batchNS.setBatch_mod_ip_add(null);
+						batchNS.setBatch_mod_usr_id(empId);
+						this.transactionalRepository.update(batchNS);
+					} else {
+						throw new MedicoException("Batch Details not found.");
+					}
+					BatchStockLogNS batchLogNS = this.batchStockLogRepository.getNSRecordByProdIdNew(detail.getGrnd_prod_id(), detail.getGrnd_batch_id(), detail.getGrnd_loc_id(), detail.getGrnd_ins_dt(), parameter.getSgprmdet_nm());
+					if(batchLogNS != null) {
+						batchLogNS.setBtchstklg_qty(batchLogNS.getBtchstklg_qty().subtract(detail.getGrnd_qty()));
+						batchLogNS.setBtchstklg_value(batchLogNS.getBtchstklg_value().subtract((detail.getGrnd_qty().multiply(detail.getGrnd_rate()))));
+						batchLogNS.setBtchstklg_mod_ip_add(null);
+						batchLogNS.setBtchstklg_mod_dt(new Date());
+						batchLogNS.setBtchstklg_mod_usr_id(empId);
+						transactionalRepository.update(batchLogNS);
+					} else {
+						throw new MedicoException("Batch Stock Log not Found.");
+					}
+				}
+				transactionalRepository.update(header);
+				this.grnRepository.deleteById(grnDetailId);
+				return grnvalue;
+			} else {
+				throw new MedicoException("GRN Details not found.");
+			}
+		} catch (Exception e) {
+			System.out.println("Error Occurred :" + new CodifyErrors().getErrorCode(e));// uncomment asneeded --;
+		}
+		return null;
+	}
+
+
+	//Called from Activity after final Approval
+	 @Override
+	 public void saveGrnApproval(Long grnId,String last_approved_by,String comp_cd,String isapproved,String motivation) {
+		 System.out.println(grnId+last_approved_by+comp_cd+isapproved+motivation);
+		System.out.println("In Approve GRN");
+		String user_id = "";
+		//Login_details login_details = (Login_details) session.getAttribute("LOGIN_DETAILS_SG");
+		//String user_name = login_details.getLd_lgnid();
+		//String user_descr = login_details.getEmp_name();
+		//String ip_addr = ServletActionContext.getRequest().getRemoteAddr();
+		String fin_year ="12";
+		Map<Long, String> apprMap = new HashMap<Long, String>();
+		 
+		try {
+			    List<GrnDetails> list = grnRepository.getGrnDetailsByGrnId(grnId);
+			    GrnHeader grnHeader = grnRepository.getObjectById(grnId);
+			    grnHeader.setGrn_appr_acq(0L);
+			    grnHeader.setGrn_mod_usr_id(user_id);
+			    grnHeader.setGrn_mod_ip_add("12345");
+			    grnHeader.setGrn_mod_dt(new Date());
+			    grnHeader.setRemarks("Demo");
+			    String status_for_mail = "";
+			    if (isapproved.equalsIgnoreCase("A")) {
+				    grnHeader.setGrn_appr_status("A");
+				    status_for_mail = "A";
+					for (GrnDetails grnDetails : list) {
+					    System.out.println("Updating batch " + grnDetails.getGrnd_batch_id());
+					    System.out.println("GRN QTY " + grnDetails.getGrnd_qty());
+					    grnRepository.updateBatchForGrn( grnDetails.getGrnd_batch_id(),grnDetails.getGrnd_qty());
+					    grnDetails.setGrnd_appr_status("A");
+					    this.transactionalRepository.update(grnDetails);
+				  }
+	
+			    } else if (isapproved.equalsIgnoreCase("D")) {
+				status_for_mail = "D";
+				// counter=0;
+				for (GrnDetails grnDetails : list) {
+					grnRepository.updateBatchQuarantine(grnDetails.getGrnd_batch_id(),
+					    grnDetails.getGrnd_qty());
+				    grnDetails.setGrnd_appr_status("D");
+				    this.transactionalRepository.update(grnDetails);
+				}
+				grnHeader.setGrn_status("I");
+				grnHeader.setGrn_appr_status("D");
+			    } else {
+				status_for_mail = "E";
+				// in case of rectify
+				grnHeader.setGrn_appr_acq(0L);
+				grnHeader.setGrn_appr_status("E");
+				grnHeader.setGrn_appr_cycle(grnHeader.getGrn_appr_cycle() + 1);
+			    }
+			    this.transactionalRepository.update(grnHeader);
+			    if (status_for_mail != "")
+			    	apprMap.put(grnId, status_for_mail);
+		    try {
+			// send mail for grn approval/discard
+				/*
+				 * if (!ps_ind && appr_level != 0) { SendMail sendMail = new SendMail(); for
+				 * (Map.Entry<Long, String> entry : apprMap.entrySet()) { Long key =
+				 * entry.getKey(); String value = entry.getValue(); //
+				 * System.err.println("KEY::"+key); // System.err.println("VALUE::"+value);
+				 * 
+				 * List<Object> grnList = grnDao.getGrnDetailsForMailSend(key); Object[] grnArr
+				 * = (Object[]) grnList.get(0); String created_by_email = (String) grnArr[14];
+				 * List<Object> mail_object = grnDao.getApprovalMailidFromApprovalMatrix(key,
+				 * Constants.GRN_Approval, comp_cd, 2);
+				 * 
+				 * if (mail_object != null && mail_object.size() > 0) { switch (value) { case
+				 * "A": sendMail.sendApprovalMailForGRN(grnList,
+				 * Arrays.asList(created_by_email), value, user_descr, "GRN approved.");
+				 * 
+				 * break; case "D": sendMail.sendApprovalMailForGRN(grnList,
+				 * Arrays.asList(created_by_email), value, user_descr, "GRN discarded."); break;
+				 * 
+				 * case "E": sendMail.sendApprovalMailForGRN(grnList,
+				 * Arrays.asList(created_by_email), value, user_descr,
+				 * "GRN send for rectification."); break;
+				 * 
+				 * case "F": List<String> toList = new ArrayList<String>(); for (Object object :
+				 * mail_object) { Object[] obj = (Object[]) object;
+				 * toList.add(obj[1].toString()); } sendMail.sendApprovalMailForGRN(grnList,
+				 * toList, value, user_descr, "GRN forwarded for approval."); break; } }
+				 * 
+				 * } }
+				 */
+		    } catch (Exception e) {
+			System.out.println("Error Occurred :" + new CodifyErrors().getErrorCode(e));// uncomment asneeded --;
+		    }
+
+		} catch (Exception e) {
+		    System.out.println("Error Occurred :" + new CodifyErrors().getErrorCode(e));// uncomment asneeded --;
+		} finally {
+		}
+	 }
+	// TODO add method to calculate gst
+	@Override
+	@Transactional(propagation = Propagation.REQUIRED, rollbackFor = Exception.class)
+	public void updateForGST(GrnDetails grnDetails, GrnHeader grnHeader,String comp_cd)  throws Exception {
+		Location recDepot = locationRepository.getObjectById(grnHeader.getGrn_loc_id());
+		String rec_gst_req_ind = recDepot.getGst_req_ind() != null ? recDepot.getGst_req_ind().trim() : "N";
+		Supplier supplier = supplierRepository.supplierStateGstNo(grnHeader.getGrn_supplier_id());
+		if (supplier == null)
+		    throw new MedicoException("Supplier not found.");
+		String sup_gst_req_ind = supplier.getGst_req_ind() != null ? supplier.getGst_req_ind().trim() : "N";
+		// apply gst only when gst_req_ind is Y in receiving location and
+		// supplier -- Uday Sir
+		System.out.println("rec_gst_req_ind " + rec_gst_req_ind);
+		System.out.println("sup_gst_req_ind " + sup_gst_req_ind);
+		if (rec_gst_req_ind.equalsIgnoreCase("Y") && sup_gst_req_ind.equalsIgnoreCase("Y")) {
+		    Boolean applyZeroGST = false;
+		    String send_gst_reg_no = supplier.getGst_reg_no();
+		    String gst_type_ind = "", gst_doc_type = "", gst_reverse_chg = "";
+	
+		    if (supplier.getState_id().compareTo(recDepot.getLoc_state_id()) == 0) {
+			gst_type_ind = "G";
+			if (send_gst_reg_no != null && !send_gst_reg_no.equalsIgnoreCase("")) {
+			    if (send_gst_reg_no.trim().equalsIgnoreCase(recDepot.getGst_reg_no().trim())) {
+				gst_doc_type = "BS";
+				gst_reverse_chg = "N";
+				applyZeroGST = true;
+			    } else {
+				gst_doc_type = "SN";
+				gst_reverse_chg = "N";
+			    }
+			} else {
+			    gst_doc_type = "SR";
+			    gst_reverse_chg = "Y";
+			}
+		    } else {
+			gst_type_ind = "I";
+			if (send_gst_reg_no != null && !send_gst_reg_no.equalsIgnoreCase("")) {
+			    gst_doc_type = "IN";
+			    gst_reverse_chg = "N";
+			} else {
+			    gst_doc_type = "IR";
+			    gst_reverse_chg = "Y";
+			}
+		    }
+		    // tran_type=03
+			 
+		    String gst_t =calculateGstRepository.getGST_Doc_type_Para_code(MedicoConstants.GRN, gst_doc_type);
+		    if (gst_t == null || gst_t.equalsIgnoreCase("")) {
+			    throw new MedicoException("GST Doc Type not found.");
+		    }
+		    gst_doc_type = gst_t;
+	
+		    BigDecimal[] detail_sum = new BigDecimal[5];
+		    Arrays.fill(detail_sum, BigDecimal.ZERO);
+		    String text1 = grnDetails.getText1();
+		    String text2 = grnDetails.getText2();
+			// get tax param here
+			BigDecimal cgst_rate = BigDecimal.ZERO;
+			BigDecimal igst_rate = BigDecimal.ZERO;
+			BigDecimal sgst_rate = BigDecimal.ZERO;
+			Object[] obj = new Object[12];
+			if (!applyZeroGST) {
+			    TaxParamBean taxparam =calculateGstRepository.getTaxParamsByStateIdAndProdId(recDepot.getLoc_state_id(),grnDetails.getGrnd_prod_id());
+			    System.out.println("Taxparam "+taxparam);
+			    obj[0]=taxparam.getProd_code();
+			    obj[1]=taxparam.getOutput_tax_param();
+			    obj[2]=taxparam.getSt_vat();
+			    obj[3]=taxparam.getCst_rt();
+			    obj[4]=taxparam.getSurch();
+			    obj[5]=taxparam.getIc_chgs();
+			    obj[6]=taxparam.getCess();
+			    obj[7]=taxparam.getTo_tax();
+			    obj[8]=taxparam.getProd_disc();
+			    obj[9]=taxparam.getCgst();
+			    obj[10]=taxparam.getIgst();
+			    obj[11]=taxparam.getSgst();
+			    cgst_rate = obj[9] != null ? new BigDecimal(obj[9].toString()) : BigDecimal.ZERO;
+			    igst_rate = obj[10] != null ? new BigDecimal(obj[10].toString()) : BigDecimal.ZERO;
+			    sgst_rate = obj[11] != null ? new BigDecimal(obj[11].toString()) : BigDecimal.ZERO;
+			}
+	
+			TaxCalculationBean taxBean = calculateGstService.generateGstValues(MedicoConstants.GRN, gst_type_ind, // gst_type_ind
+				grnDetails.getGrnd_qty(), // billedQty
+				BigDecimal.ZERO, // freeQty
+				BigDecimal.ZERO, // replQty
+				grnDetails.getGrnd_rate(), // rate
+				BigDecimal.ZERO, // party discount
+				obj != null ? obj[1].toString() : "NNNNNN", // Out_Tax_Param,
+				null, // In_Tax_Param
+				cgst_rate, // cgst_rate
+				igst_rate, // igst_rate
+				sgst_rate, // sgst_rate
+				BigDecimal.ZERO, // Surch_Rate
+				BigDecimal.ZERO, // Cess_Rate
+				BigDecimal.ZERO, // TOT_Rate
+				BigDecimal.ZERO, // Prod_Disc
+				BigDecimal.ZERO, // Octroi_Rate
+				"000", // Cust_Type
+				BigDecimal.ZERO, // mrp_diff
+				BigDecimal.ZERO, // trade discount
+				comp_cd, // Comp cd
+				BigDecimal.ZERO, // mrp rate
+				BigDecimal.ZERO, // SS RATE
+				grnDetails.getValue1().subtract(grnDetails.getValue2())); // inward
+											  // charges
+			grnDetails.setSgst_rate(taxBean.getSgst_rate());
+			grnDetails.setCgst_rate(taxBean.getCgst_rate());
+			grnDetails.setIgst_rate(taxBean.getIgst_rate());
+			grnDetails.setSgst_bill_amt(taxBean.getSgst_bill_amount());
+			grnDetails.setCGST_BILL_AMT(taxBean.getCgst_bill_amount());
+			grnDetails.setIgst_bill_amt(taxBean.getIgst_bill_amount());
+			grnDetails.setGst_reverse_chg(gst_reverse_chg);
+			grnDetails.setGst_doc_type(gst_doc_type);
+	
+			detail_sum[0] = grnHeader.getSgst_bill_amt().add(grnDetails.getSgst_bill_amt().setScale(2, RoundingMode.HALF_EVEN));
+			detail_sum[1] = grnHeader.getCgst_bill_amt().add(grnDetails.getCGST_BILL_AMT().setScale(2, RoundingMode.HALF_EVEN));
+			detail_sum[2] = grnHeader.getIgst_bill_amt().add(grnDetails.getIgst_bill_amt().setScale(2, RoundingMode.HALF_EVEN));
+			detail_sum[3] = grnHeader.getValue1().add(grnDetails.getValue1().setScale(2, RoundingMode.HALF_EVEN)); // customs
+			detail_sum[4] = grnHeader.getValue2().add(grnDetails.getValue2().setScale(2, RoundingMode.HALF_EVEN)); // discount
+			this.transactionalRepository.update(grnDetails);
+			
+		    // update gst in grn header
+		    grnHeader.setSgst_bill_amt(detail_sum[0]);
+		    grnHeader.setCgst_bill_amt(detail_sum[1]);
+		    grnHeader.setIgst_bill_amt(detail_sum[2]);
+		    grnHeader.setValue1(detail_sum[3]);
+		    grnHeader.setValue2(detail_sum[4]);
+		    grnHeader.setText1(text1);
+		    grnHeader.setText2(text2);
+		    grnHeader.setGst_reverse_chg(gst_reverse_chg);
+		    grnHeader.setGst_doc_type(gst_doc_type);
+	
+		    // find round off
+		    BigDecimal total_value_after_tax = grnHeader.getGrn_total_value().add(detail_sum[0]).add(detail_sum[1])
+			    .add(detail_sum[2]).add(detail_sum[3]) // customs duty
+			    .subtract(detail_sum[4]); // discount
+		    total_value_after_tax = total_value_after_tax.setScale(2, RoundingMode.HALF_EVEN);
+		    BigDecimal rounded_value = total_value_after_tax.setScale(0, RoundingMode.HALF_EVEN);
+		    grnHeader.setRoundoff(rounded_value.subtract(total_value_after_tax));
+		    this.transactionalRepository.update(grnHeader);
+		    // updating grnHeader outside this method
+		 
+		}
+
+	  }
+		
+	@Override
+	public Map<String, Object> getGrnApprovalHeaderDetail(@RequestParam String empId,@RequestParam String empLoc){
+		Map<String, Object> map;
+		map=grnRepository.getGrnApprovalHeaderDetail(empId, empLoc);
+		return map;
+		
+	}
+	
+	@Override
+	public Map<String,Object> getGrnApprovalSelectedDetail(@RequestParam long grnId){
+		Map<String, Object> map;
+		map=grnRepository.getGrnApprovalSelectedDetail(grnId);
+		return map;
+		
+	}
+
+	@Override
+	public void updateDetailOnSelfApproveOfGRN(String empId,long grnId, String remark, HttpServletRequest request) {
+		
+		grnRepository.updateDetailOnSelfApproveOfGRN(empId, grnId, remark, request);
+		
+	}
+	@Override
+	public void updateDetailOnSelfDiscardOfGRN(String empId, long grnId, String remark, HttpServletRequest request) {
+		
+		grnRepository.updateDetailOnSelfDiscardOfGRN(empId, grnId, remark, request);
+		
+	}
+	@Override
+	public String uploadFile(MultipartFile file) {
+		return grnRepository.uploadFile(file);
+	}
+	@Override
+	public Object viewFile(@RequestParam long grnId) throws Exception {
+		return grnRepository.viewFile(grnId);
+		
+	}
+
+	@Override
+	public List getGrnDetailForGrnVoucherPrint(String sdate,String edate,String supId,String locId) {
+		return this.grnRepository.getGrnDetailForGrnVoucherPrint(sdate,edate,supId,locId);
+	}
+}	
+

@@ -1,0 +1,7 @@
+server.port=8002
+server.servlet.context-path=/ng-sg
+spring.servlet.multipart.enabled=true
+spring.servlet.multipart.location=D:/medico_sg_temp_uploads/tmp
+spring.servlet.multipart.max-file-size=10MB
+spring.servlet.multipart.max-request-size=10MB
+spring.main.allow-bean-definition-overriding=true

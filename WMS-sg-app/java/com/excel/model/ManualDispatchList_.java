@@ -1,0 +1,42 @@
+package com.excel.model;
+
+import javax.persistence.metamodel.SingularAttribute;
+import javax.persistence.metamodel.StaticMetamodel;
+
+@StaticMetamodel(ManualDispatchList.class)
+public class ManualDispatchList_ {
+	
+	public static volatile SingularAttribute<ManualDispatchList, Long> dsp_id;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_no;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_company;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_fin_year;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_dt;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_challan_no;
+	public static volatile SingularAttribute<ManualDispatchList, Long> fstaff_id;
+	public static volatile SingularAttribute<ManualDispatchList, String> fstaff_display_name;
+	public static volatile SingularAttribute<ManualDispatchList, String> dptloc_name;
+	public static volatile SingularAttribute<ManualDispatchList, String> alloc_period;
+	public static volatile SingularAttribute<ManualDispatchList, String> alloc_dsp_period;
+	public static volatile SingularAttribute<ManualDispatchList, String> alloc_policy_name;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_manual_flg;
+	public static volatile SingularAttribute<ManualDispatchList, String> hq_name;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_total_goods_val;
+	public static volatile SingularAttribute<ManualDispatchList, String> fstaff_destination;
+	public static volatile SingularAttribute<ManualDispatchList, String> prev_flg;
+	public static volatile SingularAttribute<ManualDispatchList, Long> sumdsp_disp_cycle;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_status;
+	public static volatile SingularAttribute<ManualDispatchList, String> fstaff_name;
+	public static volatile SingularAttribute<ManualDispatchList, Long> loc_SubComp_id;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_ins_usr_id;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_appr_req;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_appr_acq;
+	public static volatile SingularAttribute<ManualDispatchList, String> dsp_appr_status;
+	public static volatile SingularAttribute<ManualDispatchList, Long> dsp_div_id;
+	public static volatile SingularAttribute<ManualDispatchList, String> division;
+	public static volatile SingularAttribute<ManualDispatchList, Long> dsp_sum_dsp_id;
+
+	
+	
+	
+	
+}

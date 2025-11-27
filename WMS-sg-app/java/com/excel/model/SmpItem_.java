@@ -1,0 +1,81 @@
+package com.excel.model;
+
+import java.math.BigDecimal;
+import java.util.Date;
+
+import javax.persistence.metamodel.SingularAttribute;
+import javax.persistence.metamodel.StaticMetamodel;
+
+@StaticMetamodel(SmpItem.class)
+public class SmpItem_ {
+
+	public static volatile SingularAttribute<SmpItem, Long> smp_prod_id;
+	public static volatile SingularAttribute<SmpItem, String> smp_prod_cd;
+	public static volatile SingularAttribute<SmpItem, String> smp_company;
+	public static volatile SingularAttribute<SmpItem, String> smp_prod_name;
+	public static volatile SingularAttribute<SmpItem, Long> smp_pack_id;
+	public static volatile SingularAttribute<SmpItem, String> alter_name;
+	public static volatile SingularAttribute<SmpItem, Date> smp_discont_dt;
+	public static volatile SingularAttribute<SmpItem, Date> launch_dt;
+	public static volatile SingularAttribute<SmpItem, Long> inv_grp_id;
+	public static volatile SingularAttribute<SmpItem, Long> uom_id;
+	public static volatile SingularAttribute<SmpItem, Long> form_id;
+	public static volatile SingularAttribute<SmpItem, String> smp_sch_ind;
+	public static volatile SingularAttribute<SmpItem, String> div_rq_ind;
+	public static volatile SingularAttribute<SmpItem, String> expiry_rq_ind;
+	public static volatile SingularAttribute<SmpItem, String> batch_rq_ind;
+	public static volatile SingularAttribute<SmpItem, String> alloc_multiples;
+	public static volatile SingularAttribute<SmpItem, String> smp_abc_ind;
+	public static volatile SingularAttribute<SmpItem, Long> smp_stock_days;
+	public static volatile SingularAttribute<SmpItem, String> smp_prod_type;
+	public static volatile SingularAttribute<SmpItem, String> sampling_type;
+	public static volatile SingularAttribute<SmpItem, Long> smp_shelf_life;
+	public static volatile SingularAttribute<SmpItem, Long> smp_mfg_loc_id;
+	public static volatile SingularAttribute<SmpItem, Long> smp_short_expiry_days;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_prod_batch_size;
+	public static volatile SingularAttribute<SmpItem, String> erp_prod_cd;
+	public static volatile SingularAttribute<SmpItem, Long> smp_sa_prod_group;
+	public static volatile SingularAttribute<SmpItem, Long> smp_thp_grp_id;
+	public static volatile SingularAttribute<SmpItem, Long> smp_thp_sgrp_id;
+	public static volatile SingularAttribute<SmpItem, Long> smp_mole_grp_id;
+	public static volatile SingularAttribute<SmpItem, Long> smp_mole_sgrp_id;
+	public static volatile SingularAttribute<SmpItem, Long> SMP_PMT_GRP_ID;
+	public static volatile SingularAttribute<SmpItem, Long> smp_pmt_sgrp_id;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> shipper_qty;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_qty_box;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_qty_strip;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> max_alloc_qty;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> min_alloc_qty;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> std_alloc_qty;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_shipper_vol;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_shipper_nwt;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_shipper_gwt;
+	public static volatile SingularAttribute<SmpItem, String> smp_exclude_loc;
+	public static volatile SingularAttribute<SmpItem, String> smp_exclude_party;
+	public static volatile SingularAttribute<SmpItem, String> smp_spec_div_ind;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_cog_rate;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_cog_exe_rate;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_rate;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_costing_rate;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_mktg_rate;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> smp_nrv;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> display_rate;
+	public static volatile SingularAttribute<SmpItem, Long> smp_std_div_id;
+	public static volatile SingularAttribute<SmpItem, String> smp_ins_usr_id;
+	public static volatile SingularAttribute<SmpItem, String> smp_mod_usr_id;
+	public static volatile SingularAttribute<SmpItem, Date> smp_ins_dt;
+	public static volatile SingularAttribute<SmpItem, Date> smp_mod_dt;
+	public static volatile SingularAttribute<SmpItem, String> smp_ins_ip_add;
+	public static volatile SingularAttribute<SmpItem, String> smp_mod_ip_add;
+	public static volatile SingularAttribute<SmpItem, String> smp_status;
+	public static volatile SingularAttribute<SmpItem, String> old_prod_name;
+	public static volatile SingularAttribute<SmpItem, Sub_Company> subCompany;
+	public static volatile SingularAttribute<SmpItem, String> invoice_grp_id;
+	public static volatile SingularAttribute<SmpItem, String> storage_type;
+	public static volatile SingularAttribute<SmpItem, Long> storage_type_id;
+	public static volatile SingularAttribute<SmpItem, Long> smp_prod_type_id;
+	public static volatile SingularAttribute<SmpItem, String> hsn_code;
+	public static volatile SingularAttribute<SmpItem, BigDecimal> margin_perc;
+	public static volatile SingularAttribute<SmpItem, String> promo_expiry_accept_ind;
+	public static volatile SingularAttribute<SmpItem, Long> smp_subcomp_id;
+}

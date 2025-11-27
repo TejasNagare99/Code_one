@@ -1,0 +1,29 @@
+package com.excel.service;
+
+import java.util.List;
+import java.util.Map;
+
+import com.excel.bean.ChangePasswordBean;
+//import com.excel.bean.ChangePasswordBean;
+//import com.excel.bean.UserMasterBean;
+import com.excel.model.Usermaster;
+
+public interface UserMasterService {
+	
+	void lockOrUnlockUser(Long userId, boolean lock) throws Exception;
+	void unlockAllUsers() throws Exception;
+	//void save(UserMasterBean bean) throws Exception;
+	List<Usermaster> getLockedUsers(String levelCode) throws Exception;
+	void unlockorLockUsersByUsernames(List<String> usernames, String lockUnlock) throws Exception;
+	//List<UserMasterBean> getActiveUsersListByDiv(Long divId, String companyCode, String levelCode) throws Exception;
+	void sendPassword(Usermaster user, String password) throws Exception;
+	String changeTemporaryPassword(String username, String password) throws Exception;
+	Object getObjectByUsername(String username) throws Exception;
+	Usermaster getUserByUsername(String username) throws Exception;
+	Usermaster getUserByFsId(Long fsId) throws Exception;
+	void fixUserPassword(String companyCode) throws Exception;
+	void changePassword(ChangePasswordBean bean) throws Exception;
+	Map<String, Object> login(String username, String password, Boolean checkLock, String company_cd) throws Exception;
+	String getAllowBatchCreateInd(String empId) throws Exception;
+
+}

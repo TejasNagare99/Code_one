@@ -1,0 +1,116 @@
+package com.excel.utility;
+
+import java.util.Arrays;
+import java.util.List;
+
+public interface MedicoConstants {
+
+	String APPLICATION_NAME = "Medico SG";
+	
+	String COMPANY_DATA = "COMPANY_DATA";
+	String COMPANY_CODE = "COMPANY_CODE";
+	String PFZ = "PFZ";
+	
+	String CURRENT = "CURRENT";
+	String PREVIOUS = "PREVIOUS";
+	
+	String MOBILE_REST_API_PREFIX = "/mobile";
+
+	String ROL = "ROL";
+
+	String PARA_CODE_001 = "001";
+
+	String NULL = "null";
+	String NA = "NA";
+	String PENDING_ALLOCATION_IND="N";
+	String SAMPLE_FLAG="";
+	String DIRECT_TO_PSO_IND = "N";
+	//BPM Task Flow
+	String BPM_LEVELWISE="LEVEL";
+	String BPM_AMOUNTWISE="AMOUNT";
+	String BPM_PERCENTAGE="PERCENTAGE";
+	String BPM_AMOUNT_LEVEL="AMOUNT_LEVEL";
+	
+	
+
+	String PENDING = "PENDING";
+	String COMPLETED = "COMPLETED";
+
+	String FIELD = "FIELD";
+	String ROLE = "ROLE";
+
+	// for saving forms
+	String DATA_SAVED = "DATA_SAVED";
+	String RESPONSE_MESSAGE = "RESPONSE_MESSAGE";
+	String "Error Occurred !! Error Code : "+new CodifyErrors().getErrorCode(e) = "Unexpected Error Occurred!";
+	String LOAD_ERROR_MESSAGE = "LOAD_ERROR_MESSAGE";
+
+	String[] NORMAL_MONTHS = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+			"November", "December"};
+	String REPORT_FILE_PATH = "D://sg//reports//";
+	
+	String APPROVAL_DECISION_PENDING = "PENDING";
+	String APPROVAL_DECISION_APPROVED = "APPROVE";
+	String APPROVAL_DECISION_DISCARDED = "DISCARD";
+	String APPROVAL_DECISION_ESCALATED = "ESCALATE";
+	
+	String APPROVAL_TYPE_FIELDWISE = "FIELD";
+	String APPROVAL_TYPE_USER = "USER";
+	String APPROVAL_TYPE_GROUP = "GROUP";
+	
+	String ALIGN_CENTER = "CENTER";
+	String ALIGN_LEFT = "LEFT";
+	String ALIGN_RIGHT = "RIGHT";
+	
+	String A = "A";
+	String Y = "Y";
+	String N = "N";
+	String E = "E";
+	
+	String GRN = "03";
+	
+	String ZERO = "ZERO";
+	
+	String SPRING_RESOURCE_HANDLER_REPORT_FILE_PATH_PREFIX = "/show-report";
+	String SPRING_RESOURCE_HANDLER_PDF_FILE_PATH_PREFIX = "/show-pdf";
+	String Dispatch_Approval = "DISPATCH";
+	String DISPATCH_APPR_TRAN = "15";
+	
+	
+	List<NotificationType> NOTIFICATION_TYPES_005 = Arrays.asList(
+		new NotificationType("0", "All"),
+		new NotificationType(INotificationTypes.REMINDERS, INotificationTypes.NOTIFICATION_TYPE_REMINDER)
+	);
+	List<NotificationType> NOTIFICATION_TYPES_MANAGERS = Arrays.asList(
+		new NotificationType("0", "All")
+	);
+	List<NotificationType> NOTIFICATION_TYPES_MANAGERS_003_002_001_000 = Arrays.asList(
+			new NotificationType("0", "All")
+		);
+	public interface INotificationTypes {
+		String REMINDERS = "RMD";
+		String NOTIFICATION_TYPE_REMINDER = "Reminder";
+	}
+	public class NotificationType {
+		private String key;
+		private String value;
+		public String getValue() {
+			return value;
+		}
+		public void setValue(String value) {
+			this.value = value;
+		}
+		public String getKey() {
+			return key;
+		}
+		public void setKey(String key) {
+			this.key = key;
+		}
+		public NotificationType(String key, String value) {
+			super();
+			this.key = key;
+			this.value = value;
+		}
+	}
+
+}
